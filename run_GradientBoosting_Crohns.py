@@ -154,14 +154,13 @@ for samples,test in StratShufSpl.split(X,y):
         df.reset_index(drop=True, inplace=True)
     X_test = pd.concat(test_dfs, axis = 1)  
     
-    param_grid = {"learning_rate": [0.1, 0.01, 0.001],
+    param_grid = {"learning_rate": [0.1, 0.01, 0.005, 0.001],
                   "n_estimators": [400],
                   "criterion": ["friedman_mse", "mse", "mae"],
-	              "max_features":["log2", "sqrt"],
-	              'learning_rate': [0.01, 0.05, 0.1, 1, 0.5], 
-	              'max_depth': [3, 4, 5],
-	              'min_samples_leaf': [4, 5, 6],
-	              'subsample': [0.6, 0.7, 0.8]}
+	          "max_features":["log2", "sqrt"],
+	          "max_depth": [2, 3, 4, 5, 6],
+	          "min_samples_leaf": [4, 5, 6],
+	          "subsample": [0.5, 0.6, 0.7, 0.8]}
     
     clf = GradientBoostingClassifier()
     skf = StratifiedKFold(n_splits = n_cv_folds, random_state = random_seed)
