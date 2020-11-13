@@ -243,7 +243,7 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
                   #"activation": ["elu"],
                   #"n_branch_outputs": [1, 4, 8],
                   "n_branch_outputs": [1, 4],
-                  "dropout": [0, 0.125, 0.25]
+                  "dropout": [0, 0.125, 0.25],
                   #"dropout": [0],
                   "reg": [0.01, 0.02]}
     
