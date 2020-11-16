@@ -43,7 +43,7 @@ np.random.seed(256)
 random_seed = 42
 
 n_shuffles = 10
-n_cv_folds = 2
+n_cv_folds = 5
 test_data_ratio = 0.2
 
 f_sele = True
@@ -245,7 +245,7 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
                   "n_branch_outputs": [1, 4],
                   "dropout": [0, 0.125, 0.25],
                   #"dropout": [0],
-                  "reg": [0.01, 0.02]}
+                  "reg": [0, 0.01, 0.02]}
     
     build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg"]
     
