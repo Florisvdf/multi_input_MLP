@@ -19,9 +19,10 @@ from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input, Lambda, Dense, concatenate, Dropout
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.losses import MeanSquaredError
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import plot_model
+from tensorflow.random import set_seed
 from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 
 import matplotlib
@@ -41,6 +42,9 @@ from CID import *
 
 np.random.seed(256)
 random_seed = 42
+
+set_seed(42)
+
 
 n_shuffles = 10
 n_cv_folds = 5
@@ -138,7 +142,7 @@ def mi_importance(perm_imps, covered):
     return perm_imps_mi
 
 
-def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, dropout, reg = 0.01):
+def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, dropout, optimizer, reg = 0.01):
     
     dim_k, dim_p, dim_c, dim_o, dim_f, dim_g, dim_s, dim_z = input_dimensions
     
@@ -192,10 +196,10 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
     x = Dense(1, activation="sigmoid")(x)
     # Final model
     model = Model(inputs=[k.input, p.input, c.input, o.input, f.input, g.input, s.input, z.input], outputs = x)
-    #model = Model(inputs=embedd.input, outputs = predict(embedd(embedd.input)))
-    #model = Model(inputs=[inputKingdom, inputPhylum, inputClass, inputOrder, inputFamily, inputGenus, inputSpecies, inputZotus], 
-    #              outputs = Predict()(Embedd()([inputKingdom, inputPhylum, inputClass, inputOrder, inputFamily, inputGenus, inputSpecies, inputZotus])))
-    model.compile(optimizer = Adam(lr = learning_rate), loss = MeanSquaredError())
+    if optimizer == "adam":
+        model.compile(optimizer = Adam(lr = learning_rate), loss = MeanSquaredError())
+    elif optimizer == "sgd":
+        model.compile(optimizer = SGD(lr = 0.1), loss = MeanSquaredError())
     return model
 
 
@@ -233,21 +237,21 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     print("--------------------------------")
     print("\n")
     param_grid = {"epochs": [300],
-                  "validation_split": [0.1],
+                  "validation_split": [0.1, 0.2],
                   "callbacks": [[EarlyStopping(patience = 20)]],
                   "batch_size": [16, 32, 64], 
                   #"batch_size": [32],
                   #"learning_rate": [0.01, 0.005, 0.001, 0.0001],
+                  "optimizer": ["adam", "sgd"],
                   "learning_rate": [0.001, 0.005],
-                  "activation": ["relu", "elu"],
+                  "activation": ["elu"],
                   #"activation": ["elu"],
-                  #"n_branch_outputs": [1, 4, 8],
                   "n_branch_outputs": [1, 4],
                   "dropout": [0, 0.125, 0.25],
                   #"dropout": [0],
-                  "reg": [0, 0.01, 0.02]}
+                  "reg": [0, 0.001, 0.005, 0.01]}
     
-    build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg"]
+    build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
     
     param_iterator = ParameterGrid(param_grid)
     grid_size = len(param_iterator)
@@ -301,6 +305,10 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         
         gs_it = 0
         for params in param_iterator:
+            print("--------------------------------")
+            print("Beginning cross validation fold {} in shuffle {} with paramers:\n {}".format(cv_fold, shuffle_counter, params))
+            print("--------------------------------")
+            print("\n")
             saved_params = params.copy()
             build_params = {key: params.pop(key) for key in build_keys}
             gs_it += 1
