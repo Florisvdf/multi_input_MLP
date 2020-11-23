@@ -228,7 +228,31 @@ plt.rcParams.update(params)
 plt.rcParams["font.family"] = "sans-serif"
 #"cursive"
 shuffle_counter=0
+param_grid = {"epochs": [1000],
+              "validation_split": [0.1, 0.2],
+              #"validation_split": [0.2],
+              "callbacks": [[EarlyStopping(patience = 20)]],
+              "batch_size": [16, 32, 64], 
+              #"batch_size": [32],
+              #"optimizer": ["adam", "sgd"],
+              "optimizer": ["sgd"],
+              #"learning_rate": [0.001, 0.005],
+              "learning_rate": [0.001],
+              "activation": ["elu"],
+              #"n_branch_outputs": [1, 4],
+              "n_branch_outputs": [1, 4, 8],
+              "dropout": [0, 0.125, 0.25],
+              #"dropout": [0],
+              #"reg": [0.001]}
+              "reg": [0, 0.001, 0.005, 0.01]}
+    
+build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
 
+param_iterator = ParameterGrid(param_grid)
+grid_size = len(param_iterator)
+    
+cv_list = ["CV_{}_GS_{}".format(str(i+1), str(j+1)) for i in range(n_cv_folds) for j in range(grid_size)]
+best_param_df = pd.DataFrame(index = list(range(1, n_shuffles + 1)), columns = param_grid.keys())
 
 for train_val_idx, test_idx in StratShufSpl.split(X, y):
     shuffle_counter += 1
@@ -236,27 +260,8 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     print("Beginning shuffle {}".format(shuffle_counter))
     print("--------------------------------")
     print("\n")
-    param_grid = {"epochs": [300],
-                  "validation_split": [0.1, 0.2],
-                  "callbacks": [[EarlyStopping(patience = 20)]],
-                  "batch_size": [16, 32, 64], 
-                  #"batch_size": [32],
-                  #"learning_rate": [0.01, 0.005, 0.001, 0.0001],
-                  "optimizer": ["adam", "sgd"],
-                  "learning_rate": [0.001, 0.005],
-                  "activation": ["elu"],
-                  #"activation": ["elu"],
-                  "n_branch_outputs": [1, 4],
-                  "dropout": [0, 0.125, 0.25],
-                  #"dropout": [0],
-                  "reg": [0, 0.001, 0.005, 0.01]}
-    
     build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
     
-    param_iterator = ParameterGrid(param_grid)
-    grid_size = len(param_iterator)
-    
-    cv_list = ["CV_{}_GS_{}".format(str(i+1), str(j+1)) for i in range(n_cv_folds) for j in range(grid_size)]
     stat_df = pd.DataFrame(index = ["AUC", "MSE", "Params"], columns = cv_list)
     
     X_train_val, y_train_val = X.iloc[train_val_idx], y[train_val_idx]
@@ -270,12 +275,14 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         X_train_val = X_train_val.iloc[:, support]
         X_test = X_test.iloc[:, support]
     
-    StratShufSplVal = StratifiedShuffleSplit(n_cv_folds,
-                                             test_size = test_data_ratio, 
-                                             random_state = random_seed)
+    #StratShufSplVal = StratifiedShuffleSplit(n_cv_folds,
+    #                                         test_size = test_data_ratio, 
+    #                                         random_state = random_seed)
+    kfold_cv = KFold(n_splits = n_cv_folds, random_state = random_seed)
     n_candidates = grid_size
     cv_fold = 0
-    for train_idx, val_idx in StratShufSplVal.split(X_train_val, y_train_val):
+    #for train_idx, val_idx in StratShufSplVal.split(X_train_val, y_train_val):
+    for train_idx, val_idx in kfold_cv.split(X_train_val, y_train_val):
         cv_fold += 1
         print("--------------------------------")
         print("Beginning cross validation fold {} in shuffle {} with {} candidates".format(cv_fold, shuffle_counter, n_candidates))
@@ -305,13 +312,13 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         
         gs_it = 0
         for params in param_iterator:
+            gs_it += 1
             print("--------------------------------")
-            print("Beginning cross validation fold {} in shuffle {} with paramers:\n {}".format(cv_fold, shuffle_counter, params))
+            print("CV fold: {} \nShuffle: {} \nCandidate: {} out of {} \nParameters:\n{}".format(cv_fold, shuffle_counter, gs_it, n_candidates, params))
             print("--------------------------------")
             print("\n")
             saved_params = params.copy()
             build_params = {key: params.pop(key) for key in build_keys}
-            gs_it += 1
             model = build_fn(dimensions, **build_params)
             model.fit(train_inputs, y_train, **params)
             y_pred_val = model.predict(val_inputs)
@@ -352,7 +359,10 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     best_params = params[best_score_index]
     print('Best found parameters:\n')
     print(best_params)
-    
+
+    for key, value in best_params.items():
+        best_param_df.loc[shuffle_counter, key] = value
+
     build_params = {key: best_params.pop(key) for key in build_keys}
     model = build_fn(dimensions, **build_params)
     model.fit(train_inputs, y_train, **best_params)
@@ -422,7 +432,8 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
 
     print("\n")
     print("Shuffle {} is done!\n".format(shuffle_counter))
-    
+
+best_param_df.to_csv("output_data/MLP_best_params.csv")
 
 plt.plot([0, 1], [0, 1], linestyle='--', lw = 1, color='r',
              label="Random guess", alpha = .8)
