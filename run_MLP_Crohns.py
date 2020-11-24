@@ -239,12 +239,10 @@ param_grid = {"epochs": [5000],
               #"learning_rate": [0.001, 0.005],
               "learning_rate": [0.001],
               "activation": ["elu"],
-              #"n_branch_outputs": [1, 4],
-              "n_branch_outputs": [1, 4],
+              "n_branch_outputs": [4],
               "dropout": [0, 0.125],
               #"dropout": [0],
-              #"reg": [0.001]}
-              "reg": [0.001, 0.005]}
+              "reg": [0.005]}
     
 build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
 
