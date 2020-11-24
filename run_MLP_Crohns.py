@@ -16,7 +16,7 @@ from sklearn.decomposition import PCA, KernelPCA
 
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import Input, Lambda, Dense, concatenate, Dropout
+from tensorflow.keras.layers import Input, Lambda, Dense, concatenate, BatchNormalization, Dropout
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.optimizers import Adam, SGD
@@ -191,8 +191,10 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
     # Concatenating outputs
     combined = concatenate([k.output, p.output, c.output, o.output, f.output, g.output, s.output, z.output])
     x = Dropout(dropout)(combined)
+    x = BatchNormalization()(x)
     # Fully connected layers
     x = Dense(32, kernel_regularizer=l2(reg), bias_regularizer=l2(reg), activation=activation)(x)
+    x = BatchNormalization()(x)
     x = Dense(1, activation="sigmoid")(x)
     # Final model
     model = Model(inputs=[k.input, p.input, c.input, o.input, f.input, g.input, s.input, z.input], outputs = x)
@@ -237,7 +239,7 @@ param_grid = {"epochs": [5000],
               #"optimizer": ["adam", "sgd"],
               "optimizer": ["sgd"],
               #"learning_rate": [0.001, 0.005],
-              "learning_rate": [0.5, 0.1, 0.05],
+              "learning_rate": [0.1],
               "activation": ["elu"],
               "n_branch_outputs": [4],
               "dropout": [0, 0.125],
