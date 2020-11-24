@@ -199,7 +199,7 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
     if optimizer == "adam":
         model.compile(optimizer = Adam(lr = learning_rate), loss = MeanSquaredError())
     elif optimizer == "sgd":
-        model.compile(optimizer = SGD(lr = 0.1), loss = MeanSquaredError())
+        model.compile(optimizer = SGD(lr = learning_rate), loss = MeanSquaredError())
     return model
 
 
@@ -237,7 +237,7 @@ param_grid = {"epochs": [5000],
               #"optimizer": ["adam", "sgd"],
               "optimizer": ["sgd"],
               #"learning_rate": [0.001, 0.005],
-              "learning_rate": [0.001],
+              "learning_rate": [0.5, 0.1, 0.05],
               "activation": ["elu"],
               "n_branch_outputs": [4],
               "dropout": [0, 0.125],
