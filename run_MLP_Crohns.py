@@ -228,11 +228,11 @@ plt.rcParams.update(params)
 plt.rcParams["font.family"] = "sans-serif"
 #"cursive"
 shuffle_counter=0
-param_grid = {"epochs": [1000],
+param_grid = {"epochs": [5000],
               "validation_split": [0.1, 0.2],
               #"validation_split": [0.2],
               "callbacks": [[EarlyStopping(patience = 20)]],
-              "batch_size": [16, 32, 64], 
+              "batch_size": [64], 
               #"batch_size": [32],
               #"optimizer": ["adam", "sgd"],
               "optimizer": ["sgd"],
@@ -240,11 +240,11 @@ param_grid = {"epochs": [1000],
               "learning_rate": [0.001],
               "activation": ["elu"],
               #"n_branch_outputs": [1, 4],
-              "n_branch_outputs": [1, 4, 8],
-              "dropout": [0, 0.125, 0.25],
+              "n_branch_outputs": [1, 4],
+              "dropout": [0, 0.125],
               #"dropout": [0],
               #"reg": [0.001]}
-              "reg": [0, 0.001, 0.005, 0.01]}
+              "reg": [0.001, 0.005]}
     
 build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
 
@@ -355,7 +355,7 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     
     grouped_df, params = group_by_params(stat_df, n_combinations = grid_size)
     #grouped_df.to_csv('output_data/grouped_validation_results_{}.csv'.format(shuffle_counter))
-    best_score_index = np.argmin(list(grouped_df.loc['MSE']))
+    best_score_index = np.argmin(list(grouped_df.loc['AUC']))
     best_params = params[best_score_index]
     print('Best found parameters:\n')
     print(best_params)
