@@ -20,6 +20,7 @@ from tensorflow.keras.layers import Input, Lambda, Dense, concatenate, BatchNorm
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import plot_model
 from tensorflow.random import set_seed
@@ -46,7 +47,7 @@ random_seed = 42
 set_seed(42)
 
 
-n_shuffles = 10
+n_shuffles = 1
 n_cv_folds = 5
 test_data_ratio = 0.2
 
@@ -191,17 +192,24 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
     # Concatenating outputs
     combined = concatenate([k.output, p.output, c.output, o.output, f.output, g.output, s.output, z.output])
     x = Dropout(dropout)(combined)
-    x = BatchNormalization()(x)
+    #x = BatchNormalization()(x)
     # Fully connected layers
-    x = Dense(32, kernel_regularizer=l2(reg), bias_regularizer=l2(reg), activation=activation)(x)
-    x = BatchNormalization()(x)
+    #x = Dense(32, kernel_regularizer=l2(reg), bias_regularizer=l2(reg), activation=activation)(x)
+    #x = BatchNormalization()(x)
     x = Dense(1, activation="sigmoid")(x)
     # Final model
+    initial_learning_rate = learning_rate
+    lr_schedule = ExponentialDecay(
+                  initial_learning_rate,
+                  decay_steps=10000,
+                  decay_rate=0.8,
+                  staircase=True)
+    #optimizer = SGD(lr = lr_schedule)
     model = Model(inputs=[k.input, p.input, c.input, o.input, f.input, g.input, s.input, z.input], outputs = x)
     if optimizer == "adam":
         model.compile(optimizer = Adam(lr = learning_rate), loss = MeanSquaredError())
     elif optimizer == "sgd":
-        model.compile(optimizer = SGD(lr = learning_rate), loss = MeanSquaredError())
+        model.compile(optimizer = SGD(learning_rate = lr_schedule), loss = MeanSquaredError())
     return model
 
 
@@ -232,19 +240,14 @@ plt.rcParams["font.family"] = "sans-serif"
 shuffle_counter=0
 param_grid = {"epochs": [5000],
               "validation_split": [0.1, 0.2],
-              #"validation_split": [0.2],
               "callbacks": [[EarlyStopping(patience = 20)]],
-              "batch_size": [64], 
-              #"batch_size": [32],
-              #"optimizer": ["adam", "sgd"],
+              "batch_size": [64],
               "optimizer": ["sgd"],
-              #"learning_rate": [0.001, 0.005],
               "learning_rate": [0.1],
               "activation": ["elu"],
-              "n_branch_outputs": [4],
+              "n_branch_outputs": [1, 4],
               "dropout": [0, 0.125],
-              #"dropout": [0],
-              "reg": [0.005]}
+              "reg": [0.001, 0.005]}
     
 build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
 
@@ -380,7 +383,7 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     plt.plot(fpr, tpr, lw=1, alpha=0.3)
     
     # Getting the taxa feature importances
-    '''
+    
     importances_permutation = {}
 
     inter_output_model = tf.keras.Model(model.input, model.get_layer(index = 26).output)
@@ -388,10 +391,16 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     for layer in model.layers[27:]:
         res_model.add(layer)
     total_inputs = []
-    for i in range(len(train_val_inputs)):
-        total_inputs.append(np.vstack((train_val_inputs[i], test_inputs[i])))
+    for j in range(len(train_val_inputs)):
+        total_inputs.append(np.vstack((train_val_inputs[j], test_inputs[j])))
     
     total_inter_outputs = inter_output_model.predict(total_inputs)
+    print("Obtained intermediate outputs")
+    np.save("total_inter_outputs_{}.npy".format(shuffle_counter), total_inter_outputs)
+    y_temp = np.concatenate((y_train_val, y_test))
+    np.save("y_{}.npy".format(shuffle_counter), y_temp)
+    print("Saved intermediate outputs")
+    '''
     test_inter_outputs = inter_output_model.predict(test_inputs)
     n_features = test_inter_outputs.shape[1]
     n_branch_features = int(n_features/8)
@@ -460,3 +469,5 @@ plt.title('Receiver operating characteristic')
 plt.legend(loc="lower right")
 plt.savefig('output_data/MLP_auc_avg.pdf', bbox_inches='tight')
 plt.show()
+
+print("Mean AUC: {}".format(mean_auc))
