@@ -323,6 +323,8 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
             saved_params = params.copy()
             build_params = {key: params.pop(key) for key in build_keys}
             model = build_fn(dimensions, **build_params)
+            #for idx, layer in enumerate(model.layers):
+            #    print(idx, layer)
             model.fit(train_inputs, y_train, **params)
             y_pred_val = model.predict(val_inputs)
             val_mse = mean_squared_error(y_val, y_pred_val)
@@ -385,10 +387,11 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     # Getting the taxa feature importances
     
     importances_permutation = {}
-
-    inter_output_model = tf.keras.Model(model.input, model.get_layer(index = 26).output)
+    for idx, layer in enumerate(model.layers):
+        print(idx, layer)
+    inter_output_model = tf.keras.Model(model.input, model.get_layer(index = 24).output)
     res_model = Sequential()
-    for layer in model.layers[27:]:
+    for layer in model.layers[25:]:
         res_model.add(layer)
     total_inputs = []
     for j in range(len(train_val_inputs)):
