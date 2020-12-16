@@ -503,5 +503,5 @@ plt.show()
 print("Mean AUC: {}".format(mean_auc))
 
 np.save("CID_precision.npy", cid.precision)
-np.save("CID_covariance.npy", np.cov(total_inter_outputs.T))))
-np.save("CID_inv_covariance.npy", np.linalg.pinv(np.cov(total_inter_outputs.T))))
+np.save("CID_covariance.npy", np.cov(total_inter_outputs.T))
+np.save("CID_inv_covariance.npy", np.linalg.pinv(np.cov(total_inter_outputs.T)))
