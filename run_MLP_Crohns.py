@@ -40,20 +40,21 @@ import shutil
 
 from CID import *
 
+# Random seeds
+np.random.seed(256) # For Numpy
+random_seed = 42 # For SKlearn
+set_seed(42) # For tensorflow
 
-np.random.seed(256)
-random_seed = 42
-
-set_seed(42)
-
-
-n_shuffles = 1
+# Training settings
+n_shuffles = 10
 n_cv_folds = 5
 test_data_ratio = 0.2
 
+# Feature selection settings
 f_sele = True
 f_percent = 30
 
+# Phenotype distribution
 # CD': 731, 'no': 335, 'UC': 219, 'IC': 73,
 phenotype = "CD"
 
@@ -63,7 +64,7 @@ try:
 except OSError:
     print("Directory already exists")
 
-
+# Loading data
 # Training data
 X = pd.read_csv("input_data/crohns/TN_crohn.unoise3.ASV.table_FINAL.txt", sep = "\t", index_col = 0)
 X = X.transpose()
@@ -82,7 +83,7 @@ drop_id = ids[np.where(labels == "control")[0][0]]
 labels = np.delete(labels, np.where(labels == "control")[0][0])
 X = X.drop(drop_id)
 
-
+# Balancing the dataset 50/50 case control
 len_healthy = counts["no"]
 len_disease = counts[phenotype]
 if len_healthy < len_disease:
@@ -95,17 +96,16 @@ joined_idx = np.concatenate((disease_idx, healthy_idx))
 X = X.iloc[joined_idx]
 labels = labels[joined_idx]
 
-
+# Encoding the labels to be binary 
 enc = OneHotEncoder(sparse = False)
 y = enc.fit_transform(labels.astype(str).reshape(-1, 1))
 y = y[:, 0]
 
-
-# Filter out Eukaryotes?
+# Filter out Eukaryotes as they are most likely artefacts
 eukaryote_zotus = tax_table.index[(tax_table["Kingdom"] == "Eukaryota").values]
 X = X.drop(eukaryote_zotus, 1)
 
-
+# Function for mapping the Zotu abundances to every taxanomic rank starting at kingdom. Returns a list of rank abundance dataframes
 def zotus_to_tax_dfs(zotu_abundances, tax_table):
     dataframes = []
     for rank in ["Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"]:
@@ -123,7 +123,7 @@ def zotus_to_tax_dfs(zotu_abundances, tax_table):
     dataframes.append(zotu_abundances)
     return dataframes
 
-
+# Function used in GS CV. Groups all run results by the parameters used in the run. Used for finding the best parameters in a grid search.
 def group_by_params(df, n_combinations, n_scores = 2):
     mean_score_df = pd.DataFrame(index = df.index[:n_scores], columns = [comb + 1 for comb in range(n_combinations)])
     params = []
@@ -134,7 +134,7 @@ def group_by_params(df, n_combinations, n_scores = 2):
     mean_score_df.loc['Params'] = params
     return mean_score_df, params 
 
-
+# Function from CID
 def mi_importance(perm_imps, covered):
     percentage_uncovered = 1 - covered
 
@@ -142,7 +142,7 @@ def mi_importance(perm_imps, covered):
 
     return perm_imps_mi
 
-
+# Function for building the neural net.
 def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, dropout, optimizer, reg = 0.01):
     
     dim_k, dim_p, dim_c, dim_o, dim_f, dim_g, dim_s, dim_z = input_dimensions
@@ -212,21 +212,24 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
         model.compile(optimizer = SGD(learning_rate = lr_schedule), loss = MeanSquaredError())
     return model
 
-
+# Creating empty lists for appending ROC AUC properties
 list_auc=[]
-
 tprs = []
 aucs = []
 mean_fpr = np.linspace(0, 1, 100)
 
 i = 0
+# Instantiating the stratified shuffle split object for the main shuffle loop
 StratShufSpl=StratifiedShuffleSplit(n_shuffles,
                                     test_size = test_data_ratio, 
                                     random_state = random_seed)
 
+# List storing the feature importances for each taxonomic rank for each shuffle
 taxa_fis = []
+# List storing the covered information vector for each shuffle
 list_covered = []
 
+# Some matplotlib settings that I think are mostly redundant
 plt.style.use('ggplot')
 params = {'legend.fontsize': 'medium',
           'figure.figsize': (10, 10),
@@ -236,8 +239,9 @@ params = {'legend.fontsize': 'medium',
           'ytick.labelsize':'medium'}
 plt.rcParams.update(params)
 plt.rcParams["font.family"] = "sans-serif"
-#"cursive"
-shuffle_counter=0
+
+shuffle_counter = 0
+# Parameter grid for the grid search
 param_grid = {"epochs": [5000],
               "validation_split": [0.1, 0.2],
               "callbacks": [[EarlyStopping(patience = 20)]],
@@ -248,28 +252,34 @@ param_grid = {"epochs": [5000],
               "n_branch_outputs": [1, 4],
               "dropout": [0, 0.125],
               "reg": [0.001, 0.005]}
-    
+
+# Specific keys that are used for building the model. They parameter dict is later split, because one part is used for building the model and the other part is used for fitting the model.
 build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
 
 param_iterator = ParameterGrid(param_grid)
 grid_size = len(param_iterator)
-    
+
+# The cv_list is later used as columns for a dataframe keeping track of the results of all parameter combinations    
 cv_list = ["CV_{}_GS_{}".format(str(i+1), str(j+1)) for i in range(n_cv_folds) for j in range(grid_size)]
+# A dataframe that will store the best parameters for every shuffle
 best_param_df = pd.DataFrame(index = list(range(1, n_shuffles + 1)), columns = param_grid.keys())
 
+# Beginning the shuffle loop
 for train_val_idx, test_idx in StratShufSpl.split(X, y):
     shuffle_counter += 1
     print("--------------------------------")
     print("Beginning shuffle {}".format(shuffle_counter))
     print("--------------------------------")
     print("\n")
-    build_keys = ["learning_rate", "activation", "n_branch_outputs", "dropout", "reg", "optimizer"]
     
+    # Creating a dataframe that keeps track of the AUC, MSE and parameters for all parameter combinations in every fold of the cross validation
     stat_df = pd.DataFrame(index = ["AUC", "MSE", "Params"], columns = cv_list)
     
+    # Splitting the dataset in train+val and test
     X_train_val, y_train_val = X.iloc[train_val_idx], y[train_val_idx]
     X_test, y_test = X.iloc[test_idx], y[test_idx]
     
+    # Performating univariate feature selection
     if f_sele:
         print("Univariately selecting features\n")
         selector = SelectPercentile(f_classif, f_percent)
@@ -278,19 +288,19 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         X_train_val = X_train_val.iloc[:, support]
         X_test = X_test.iloc[:, support]
     
-    #StratShufSplVal = StratifiedShuffleSplit(n_cv_folds,
-    #                                         test_size = test_data_ratio, 
-    #                                         random_state = random_seed)
+    # Instantiating the kfold cv object 
     kfold_cv = KFold(n_splits = n_cv_folds, random_state = random_seed)
     n_candidates = grid_size
     cv_fold = 0
-    #for train_idx, val_idx in StratShufSplVal.split(X_train_val, y_train_val):
+
+    # Beginning the the cross validation loop
     for train_idx, val_idx in kfold_cv.split(X_train_val, y_train_val):
         cv_fold += 1
         print("--------------------------------")
         print("Beginning cross validation fold {} in shuffle {} with {} candidates".format(cv_fold, shuffle_counter, n_candidates))
         print("--------------------------------")
         print("\n")
+        # Spltting train+val in train and val
         X_train, y_train = X_train_val.iloc[train_idx], y_train_val[train_idx]
         X_val, y_val = X_train_val.iloc[val_idx], y_train_val[val_idx]
 
@@ -314,6 +324,7 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         print("Finished scaling")
         
         gs_it = 0
+        # Iterating over the parameter grid
         for params in param_iterator:
             gs_it += 1
             print("--------------------------------")
@@ -322,22 +333,25 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
             print("\n")
             saved_params = params.copy()
             build_params = {key: params.pop(key) for key in build_keys}
+            # Instantiating model
             model = build_fn(dimensions, **build_params)
-            #for idx, layer in enumerate(model.layers):
-            #    print(idx, layer)
+            # Fitting model
             model.fit(train_inputs, y_train, **params)
+            # Making predictions on the validation set
             y_pred_val = model.predict(val_inputs)
+            # Scoring the predictions
             val_mse = mean_squared_error(y_val, y_pred_val)
             val_auc = roc_auc_score(y_val, y_pred_val)
             print("\n")
             print("Val AUC: {}".format(val_auc))
             print("\n")
             
+            # Storing the results in the dataframe used for finging the best parameters in the current shuffle
             stat_df.loc["MSE"]["CV_{}_GS_{}".format(cv_fold, gs_it)] = val_mse
             stat_df.loc["AUC"]["CV_{}_GS_{}".format(cv_fold, gs_it)] = val_auc
             stat_df.loc["Params"]["CV_{}_GS_{}".format(cv_fold, gs_it)] = saved_params
     
-    # Fitting on entire train_val
+    # Fitting on entire train+val
     print("--------------------------------")
     print("Refitting on train + val and evaluating on test")
     print("--------------------------------")
@@ -358,20 +372,28 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         test_inputs.append(np.clip(scaler.transform(test_dfs[i]), 0, 1))
     print("Finished scaling")
     
+    # Finding the average score over the folds for every parameter combination
     grouped_df, params = group_by_params(stat_df, n_combinations = grid_size)
     #grouped_df.to_csv('output_data/grouped_validation_results_{}.csv'.format(shuffle_counter))
+    # Finding the best parameters based on the highest average AUC
     best_score_index = np.argmin(list(grouped_df.loc['AUC']))
     best_params = params[best_score_index]
     print('Best found parameters:\n')
     print(best_params)
 
+    # Storing the best parameters for this shuffle
     for key, value in best_params.items():
         best_param_df.loc[shuffle_counter, key] = value
-
+    
+    # Fitting on the entire train+val
     build_params = {key: best_params.pop(key) for key in build_keys}
+    # Instatiating model
     model = build_fn(dimensions, **build_params)
+    # Fitting model
     model.fit(train_inputs, y_train, **best_params)
+    # Makign predictions on test
     y_pred_test = model.predict(test_inputs)
+    # Scoring on test
     test_mse = mean_squared_error(y_test, y_pred_test)
     test_auc = roc_auc_score(y_val, y_pred_val)
 
@@ -384,42 +406,48 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
     aucs.append(auc_roc1)
     plt.plot(fpr, tpr, lw=1, alpha=0.3)
     
-    # Getting the taxa feature importances
-    
+    # CID ON LEARNED FEATURES!
     importances_permutation = {}
-    for idx, layer in enumerate(model.layers):
-        print(idx, layer)
+    # Truncating the model based on the layer index. This model will output the learned features
     inter_output_model = tf.keras.Model(model.input, model.get_layer(index = 24).output)
+    # Storing the rest of the model. This model takes as input the learned features and outputs the class "probability"
     res_model = Sequential()
     for layer in model.layers[25:]:
         res_model.add(layer)
+    # Creating a new input that is the entire training set
     total_inputs = []
     for j in range(len(train_val_inputs)):
         total_inputs.append(np.vstack((train_val_inputs[j], test_inputs[j])))
-    
+    # Getting the learned features
     total_inter_outputs = inter_output_model.predict(total_inputs)
     print("Obtained intermediate outputs")
     np.save("total_inter_outputs_{}.npy".format(shuffle_counter), total_inter_outputs)
-    y_temp = np.concatenate((y_train_val, y_test))
-    np.save("y_{}.npy".format(shuffle_counter), y_temp)
+    # Creating a new label dataset that matches the indexing of the entire training set (total_intputs)
+    y_temp = np.concatenate((y_train_val, y_test)).reshape(-1, 1)
+    #np.save("output_data/y_{}.npy".format(shuffle_counter), y_temp)
+    np.save("output_data/MLP/y_pred_test{}.npy".format(shuffle_counter), y_pred_test)
+    np.save("output_data/MLP/y_test{}.npy".format(shuffle_counter), y_test)
     print("Saved intermediate outputs")
-    '''
+    # Getting the learned features on the test set
     test_inter_outputs = inter_output_model.predict(test_inputs)
+    # Checking the dimensionality of the learned features
     n_features = test_inter_outputs.shape[1]
+    # Checking the dimensionality per branch (subnetwork)
     n_branch_features = int(n_features/8)
     input_names = ["zotu", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    # Storing the feature names: Zotu_1, Zotu_2, ..., class_1, etc
     feature_names = []
     for branch_name in input_names:
         for i in range(n_branch_features):
             feature_names.append(branch_name + "_" + str(i))
 
-    #y_test = y_test.reshape(-1, 1)
     y = y.reshape(-1, 1)
-
-    cid = CIDGmm(data = total_inter_outputs, y = y, n_bins=50, scale_data=True, discretize=True, data_std_threshold=3,
+    # Getting the covered information
+    cid = CIDGmm(data = total_inter_outputs, y = y_temp, n_bins=50, scale_data=True, discretize=True, data_std_threshold=3,
                  empirical_mi=False, redund_correction=True,
                  kwargs={'max_iter': 5000, 'alphas': [0.0001, 0.001, 0.01, 0.1, 0.3], 'tol': 1e-4})
     covered, mi_y = cid.fit(n_samples=1)
+    np.save("output_data/MLP/covered_{}.npy".format(shuffle_counter), covered)
     list_covered.append(covered)
     test_inds = np.arange(test_inter_outputs.shape[0])
     np.random.shuffle(test_inds)
@@ -433,20 +461,19 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         importances_permutation[feat_1] = test_auc - auc_
 
     importances_permutation = pd.DataFrame(importances_permutation, index = [0]).transpose()
-
     mi_imps = mi_importance(importances_permutation, covered.reshape(-1, 1))
 
     agg_mi_imps = mi_imps.groupby([mi_imps.index.str[:4]]).mean()
     print("Importances : {}".format(agg_mi_imps))
-
+    agg_mi_imps.to_csv("output_data/MLP/agg_mi_imps_{}.csv".format(shuffle_counter))
     taxa_fis.append(agg_mi_imps)
-    '''
 
     print("\n")
     print("Shuffle {} is done!\n".format(shuffle_counter))
 
-best_param_df.to_csv("output_data/MLP_best_params.csv")
+best_param_df.to_csv("output_data/MLP/MLP_best_params.csv")
 
+# Plotting the ROC AUC
 plt.plot([0, 1], [0, 1], linestyle='--', lw = 1, color='r',
              label="Random guess", alpha = .8)
 
@@ -474,3 +501,7 @@ plt.savefig('output_data/MLP_auc_avg.pdf', bbox_inches='tight')
 plt.show()
 
 print("Mean AUC: {}".format(mean_auc))
+
+np.save("CID_precision.npy", cid.precision)
+np.save("CID_covariance.npy", np.cov(total_inter_outputs.T))))
+np.save("CID_inv_covariance.npy", np.linalg.pinv(np.cov(total_inter_outputs.T))))
