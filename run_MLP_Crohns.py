@@ -209,7 +209,8 @@ def build_fn(input_dimensions, learning_rate, activation, n_branch_outputs, drop
     if optimizer == "adam":
         model.compile(optimizer = Adam(lr = learning_rate), loss = MeanSquaredError())
     elif optimizer == "sgd":
-        model.compile(optimizer = SGD(learning_rate = lr_schedule), loss = MeanSquaredError())
+        #model.compile(optimizer = SGD(learning_rate = lr_schedule), loss = MeanSquaredError())
+        model.compile(optimizer = SGD(learning_rate = learning_rate), loss = MeanSquaredError())
     return model
 
 # Creating empty lists for appending ROC AUC properties
@@ -243,13 +244,13 @@ plt.rcParams["font.family"] = "sans-serif"
 shuffle_counter = 0
 # Parameter grid for the grid search
 param_grid = {"epochs": [5000],
-              "validation_split": [0.1, 0.2],
+              "validation_split": [0.1],
               "callbacks": [[EarlyStopping(patience = 20)]],
               "batch_size": [64],
               "optimizer": ["sgd"],
               "learning_rate": [0.1],
               "activation": ["elu"],
-              "n_branch_outputs": [1, 4],
+              "n_branch_outputs": [4],
               "dropout": [0, 0.125],
               "reg": [0.001, 0.005]}
 
