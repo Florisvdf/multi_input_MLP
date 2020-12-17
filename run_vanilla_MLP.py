@@ -70,6 +70,8 @@ X = pd.read_csv("input_data/crohns/TN_crohn.unoise3.ASV.table_FINAL.txt", sep = 
 X = X.transpose()
 labels = np.load("input_data/crohns/labels.npy", allow_pickle = True)
 ids = np.load("input_data/crohns/IDs.npy", allow_pickle = True)
+# Taxa data
+tax_table = pd.read_csv("input_data/crohns/ASV_taxonomy_TN_crohn_SILVA_138.csv", index_col = "ASV_ID")
 
 counts = Counter(labels)
 print(counts)
