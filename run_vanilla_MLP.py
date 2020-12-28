@@ -235,10 +235,10 @@ for train_val_idx, test_idx in StratShufSpl.split(X, y):
         X_train = np.log(X_train+1)
         X_val = np.log(X_val+1)
         scaler = MinMaxScaler()
-        scaler.fit(X_train[i])
+        scaler.fit(X_train)
         X_train = np.clip(scaler.transform(X_train), 0, 1)
         X_val = np.clip(scaler.transform(X_val), 0, 1)
-        dimensions = train_dfs[i].shape[-1]
+        dimensions = X_train.shape[-1]
         print("Finished scaling")
         
         gs_it = 0
